@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ThreadLine - Offline Business & Portfolio Finance Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#FDF2F8',
+              100: '#FCE7F3',
+              200: '#FBCFE8',
+              300: '#F9A8D4',
+              400: '#F472B6',
+              500: '#EC4899',
+              600: '#DB2777',
+              700: '#BE185D',
+              800: '#9D174D',
+              900: '#831843',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @media print {
+      .no-print { display: none !important; }
+      .print-only { display: block !important; }
+      body { background: white; color: black; }
+    }
+    .print-only { display: none; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col">
+
+  <!-- TOP HEADER -->
+  <header class="bg-white border-b border-brand-100 shadow-sm sticky top-0 z-30 no-print">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-400 to-brand-300 flex items-center justify-center text-white font-bold text-xl shadow-md">
+          TL
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-slate-900 tracking-tight">ThreadLine</h1>
+          <p class="text-xs text-brand-600 font-medium">Offline Business & Portfolio Tracker</p>
+        </div>
+      </div>
+
+      <!-- Actions Header -->
+      <div class="flex items-center space-x-2">
+        <select id="currencySelector" onchange="changeCurrency(this.value)" class="text-xs font-semibold bg-brand-50 border border-brand-200 text-brand-700 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-400">
+          <option value="₱">PHP (₱)</option>
+          <option value="$">USD ($)</option>
+          <option value="€">EUR (€)</option>
+          <option value="£">GBP (£)</option>
+          <option value="¥">JPY (¥)</option>
+        </select>
+        <button onclick="exportJSON()" class="text-xs bg-white hover:bg-slate-50 text-slate-700 font-semibold px-3 py-1.5 border border-slate-200 rounded-lg transition shadow-sm">
+          Export Backup
+        </button>
+        <label class="text-xs bg-white hover:bg-slate-50 text-slate-700 font-semibold px-3 py-1.5 border border-slate-200 rounded-lg cursor-pointer transition shadow-sm">
+          Import Backup
+          <input type="file" id="importFileInput" onchange="importJSON(event)" class="hidden" accept=".json">
+        </label>
+        <button onclick="window.print()" class="text-xs bg-brand-50 hover:bg-brand-100 text-brand-700 font-semibold px-3 py-1.5 border border-brand-200 rounded-lg transition">
+          Print Summary
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- PRINT ONLY HEADER -->
+  <div class="print-only p-6 border-b border-slate-200">
+    <h1 class="text-2xl font-bold text-slate-900">ThreadLine Financial Report</h1>
+    <p class="text-sm text-slate-500" id="printDate"></p>
+  </div>
+
+  <!-- NAVIGATION TABS -->
+  <nav class="bg-white border-b border-slate-200 no-print">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex overflow-x-auto space-x-8 text-sm font-medium text-slate-500">
+      <button onclick="switchTab('dashboard')" id="tab-dashboard" class="py-3 px-1 border-b-2 border-brand-500 text-brand-600 font-semibold whitespace-nowrap">
+        Dashboard
+      </button>
+      <button onclick="switchTab('ledger')" id="tab-ledger" class="py-3 px-1 border-b-2 border-transparent hover:text-slate-700 whitespace-nowrap">
+        Income & Expenses
+      </button>
+      <button onclick="switchTab('payables')" id="tab-payables" class="py-3 px-1 border-b-2 border-transparent hover:text-slate-700 whitespace-nowrap">
+        Payables & Receivables
+      </button>
+      <button onclick="switchTab('stocks')" id="tab-stocks" class="py-3 px-1 border-b-2 border-transparent hover:text-slate-700 whitespace-nowrap">
+        Stock Portfolio
+      </button>
+    </div>
+  </nav>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- 1. DASHBOARD VIEW -->
+    <div id="view-dashboard" class="space-y-6">
+      
+      <!-- Summary Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Net Profit -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
+          <div class="absolute top-0 right-0 w-2 h-full bg-brand-400"></div>
+          <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Net Cash Profit</span>
+          <div class="text-2xl font-bold text-slate-900 mt-1" id="dashNetProfit">₱0.00</div>
+          <p class="text-xs text-slate-500 mt-1" id="dashProfitSub">Income - Expenses</p>
+        </div>
+
+        <!-- Total Receivables (Money Owed to You) -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
+          <div class="absolute top-0 right-0 w-2 h-full bg-emerald-400"></div>
+          <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Money Owed To You</span>
+          <div class="text-2xl font-bold text-emerald-600 mt-1" id="dashReceivables">₱0.00</div>
+          <p class="text-xs text-slate-500 mt-1">Pending customer/borrower payments</p>
+        </div>
+
+        <!-- Total Payables (Money You Owe) -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
+          <div class="absolute top-0 right-0 w-2 h-full bg-rose-400"></div>
+          <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Money You Owe</span>
+          <div class="text-2xl font-bold text-rose-600 mt-1" id="dashPayables">₱0.00</div>
+          <p class="text-xs text-slate-500 mt-1">Pending debts & supplier bills</p>
+        </div>
+
+        <!-- Stock Portfolio Valuation -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
+          <div class="absolute top-0 right-0 w-2 h-full bg-purple-400"></div>
+          <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Stock Portfolio Value</span>
+          <div class="text-2xl font-bold text-purple-600 mt-1" id="dashStockVal">₱0.00</div>
+          <p class="text-xs text-slate-500 mt-1" id="dashStockPnL">Unrealized P&L: ₱0.00</p>
+        </div>
+      </div>
+
+      <!-- Payment Method Breakdown Cards -->
+      <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+        <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4">Cash Flow by Payment Channel</h3>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+          <div class="p-4 rounded-xl bg-blue-50 border border-blue-100">
+            <span class="text-xs text-blue-600 font-semibold block">GCash</span>
+            <span class="text-lg font-bold text-blue-900 mt-1 block" id="channelGCash">₱0.00</span>
+          </div>
+          <div class="p-4 rounded-xl bg-indigo-50 border border-indigo-100">
+            <span class="text-xs text-indigo-600 font-semibold block">Online Bank</span>
+            <span class="text-lg font-bold text-indigo-900 mt-1 block" id="channelBank">₱0.00</span>
+          </div>
+          <div class="p-4 rounded-xl bg-emerald-50 border border-emerald-100">
+            <span class="text-xs text-emerald-600 font-semibold block">Cash</span>
+            <span class="text-lg font-bold text-emerald-900 mt-1 block" id="channelCash">₱0.00</span>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+            <span class="text-xs text-slate-600 font-semibold block">Other Channels</span>
+            <span class="text-lg font-bold text-slate-800 mt-1 block" id="channelOther">₱0.00</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cash Flow Chart -->
+      <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+        <h3 class="text-base font-bold text-slate-900 mb-4">Monthly Income vs Expenses</h3>
+        <div class="h-64 relative">
+          <canvas id="cashflowChart"></canvas>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 2. INCOME & EXPENSE LEDGER -->
+    <div id="view-ledger" class="hidden space-y-6">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 class="text-lg font-bold text-slate-900">Income & Expense Transactions</h2>
+          <p class="text-xs text-slate-500">Record sales, inventory costs, and operating expenses.</p>
+        </div>
+        <button onclick="openModal('transactionModal')" class="bg-brand-500 hover:bg-brand-600 text-white font-semibold text-xs px-4 py-2.5 rounded-xl shadow-sm transition">
+          + Add Transaction
+        </button>
+      </div>
+
+      <!-- Filters & Search -->
+      <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-wrap gap-3 items-center justify-between">
+        <input type="text" id="ledgerSearch" oninput="renderLedger()" placeholder="Search buyer, item, category..." class="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-brand-400">
+        
+        <div class="flex items-center space-x-2 w-full sm:w-auto">
+          <select id="ledgerTypeFilter" onchange="renderLedger()" class="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400">
+            <option value="all">All Types</option>
+            <option value="income">Income Only</option>
+            <option value="expense">Expense Only</option>
+          </select>
+          <select id="ledgerMethodFilter" onchange="renderLedger()" class="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400">
+            <option value="all">All Channels</option>
+            <option value="GCash">GCash</option>
+            <option value="Online Bank">Online Bank</option>
+            <option value="Cash">Cash</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Transactions Table -->
+      <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-slate-600">
+            <thead class="bg-slate-50 text-slate-500 font-semibold uppercase tracking-wider border-b border-slate-100">
+              <tr>
+                <th class="p-3">Date</th>
+                <th class="p-3">Type</th>
+                <th class="p-3">Category</th>
+                <th class="p-3">Buyer / Vendor</th>
+                <th class="p-3">Qty</th>
+                <th class="p-3">Channel</th>
+                <th class="p-3">Description</th>
+                <th class="p-3 text-right">Amount</th>
+                <th class="p-3 text-center no-print">Action</th>
+              </tr>
+            </thead>
+            <tbody id="ledgerTableBody" class="divide-y divide-slate-100">
+              <!-- Rendered via JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. PAYABLES & RECEIVABLES -->
+    <div id="view-payables" class="hidden space-y-6">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 class="text-lg font-bold text-slate-900">Borrowers & Debt Ledger</h2>
+          <p class="text-xs text-slate-500">Track money owed to you by customers/borrowers and bills you owe.</p>
+        </div>
+        <button onclick="openModal('payableModal')" class="bg-brand-500 hover:bg-brand-600 text-white font-semibold text-xs px-4 py-2.5 rounded-xl shadow-sm transition">
+          + Add Owed Record
+        </button>
+      </div>
+
+      <!-- Payables/Receivables List -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        <!-- Receivables (Money Owed To You) -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+          <h3 class="font-bold text-slate-800 text-sm flex items-center justify-between">
+            <span>Receivables (Customers / Borrowers)</span>
+            <span class="text-xs font-normal text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full" id="receivableCount">0 Pending</span>
+          </h3>
+          <div id="receivablesList" class="space-y-3">
+            <!-- Rendered JS -->
+          </div>
+        </div>
+
+        <!-- Payables (Money You Owe) -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+          <h3 class="font-bold text-slate-800 text-sm flex items-center justify-between">
+            <span>Payables (Suppliers / Lenders)</span>
+            <span class="text-xs font-normal text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full" id="payableCount">0 Pending</span>
+          </h3>
+          <div id="payablesList" class="space-y-3">
+            <!-- Rendered JS -->
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 4. STOCK PORTFOLIO -->
+    <div id="view-stocks" class="hidden space-y-6">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 class="text-lg font-bold text-slate-900">Stock & Asset Portfolio</h2>
+          <p class="text-xs text-slate-500">Monitor your offline stock holdings, cost basis, and current portfolio P&L.</p>
+        </div>
+        <button onclick="openModal('stockModal')" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl shadow-sm transition">
+          + Add Stock Holding
+        </button>
+      </div>
+
+      <!-- Stock Table -->
+      <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-slate-600">
+            <thead class="bg-slate-50 text-slate-500 font-semibold uppercase tracking-wider border-b border-slate-100">
+              <tr>
+                <th class="p-3">Ticker / Symbol</th>
+                <th class="p-3">Shares / Units</th>
+                <th class="p-3">Avg Buy Price</th>
+                <th class="p-3">Current Price</th>
+                <th class="p-3">Total Investment</th>
+                <th class="p-3">Current Value</th>
+                <th class="p-3 text-right">Unrealized P&L</th>
+                <th class="p-3 text-center no-print">Action</th>
+              </tr>
+            </thead>
+            <tbody id="stockTableBody" class="divide-y divide-slate-100">
+              <!-- Rendered via JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- MODALS -->
+
+  <!-- 1. Transaction Modal -->
+  <div id="transactionModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl">
+      <h3 class="text-base font-bold text-slate-900 mb-4">Add Transaction</h3>
+      <form onsubmit="saveTransaction(event)" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">Transaction Type</label>
+          <select id="txType" onchange="toggleTxFields()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-400">
+            <option value="income">Income (Sale / Service)</option>
+            <option value="expense">Expense (Cost / Inventory)</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-medium text-slate-700 mb-1">Date</label>
+            <input type="date" id="txDate" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-400">
+          </div>
+          <div>
+            <label class="block font-medium text-slate-700 mb-1">Amount</label>
+            <input type="number" step="0.01" id="txAmount" required placeholder="0.00" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-400">
+          </div>
+        </div>
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">Payment Method</label>
+          <select id="txMethod" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-400">
+            <option value="GCash">GCash</option>
+            <option value="Online Bank">Online Bank Transfer</option>
+            <option value="Cash">Cash</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div id="buyerFieldGroup">
+          <label class="block font-medium text-slate-700 mb-1">Buyer Name</label>
+          <input type="text" id="txBuyer" placeholder="e.g. Maria Santos" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-400">
+        </div>
+        <div id="qtyFieldGroup">
+          <label class="block font-medium text-slate-700 mb-1">Quantity Purchased</label>
+          <input type="number" id="txQty" value="1" min="1" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-400">
+        </div>
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">Category</label>
+          <input type="text" id="txCategory" placeholder="e.g. Sales, Apparel, Shipping" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-400">
+        </div>
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">Description / Notes</label>
+          <input type="text" id="txDesc" placeholder="e.g. 2x Pastel Dresses" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-400">
+        </div>
+        <div class="flex justify-end space-x-2 pt-3">
+          <button type="button" onclick="closeModal('transactionModal')" class="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl font-medium">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-medium">Save Record</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. Payables/Receivables Modal -->
+  <div id="payableModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl">
+      <h3 class="text-base font-bold text-slate-900 mb-4">Add Owed / Borrowed Money</h3>
+      <form onsubmit="savePayable(event)" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">Record Type</label>
+          <select id="payType" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-400">
+            <option value="receivable">Receivable (Money Owed to You)</option>
+            <option value="payable">Payable (Money You Owe)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">Borrower / Lender Name</label>
+          <input type="text" id="payPerson" required placeholder="e.g. Juan Dela Cruz" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-400">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-medium text-slate-700 mb-1">Amount</label>
+            <input type="number" step="0.01" id="payAmount" required placeholder="0.00" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-400">
+          </div>
+          <div>
+            <label class="block font-medium text-slate-700 mb-1">Due Date</label>
+            <input type="date" id="payDueDate" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-400">
+          </div>
+        </div>
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">Payment Method / Channel</label>
+          <select id="payMethod" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-400">
+            <option value="GCash">GCash</option>
+            <option value="Online Bank">Online Bank Transfer</option>
+            <option value="Cash">Cash</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">Notes / Item Details</label>
+          <input type="text" id="payNotes" placeholder="e.g. Borrowed for inventory purchase" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-400">
+        </div>
+        <div class="flex justify-end space-x-2 pt-3">
+          <button type="button" onclick="closeModal('payableModal')" class="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl font-medium">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-medium">Save Record</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. Stock Modal -->
+  <div id="stockModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl">
+      <h3 class="text-base font-bold text-slate-900 mb-4">Add Stock Holding</h3>
+      <form onsubmit="saveStock(event)" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">Stock Ticker Symbol</label>
+          <input type="text" id="stockSymbol" required placeholder="e.g. AAPL, BDO, AC" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 uppercase focus:ring-2 focus:ring-brand-400">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-medium text-slate-700 mb-1">Shares / Units</label>
+            <input type="number" step="0.0001" id="stockShares" required placeholder="0" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-400">
+          </div>
+          <div>
+            <label class="block font-medium text-slate-700 mb-1">Avg Buy Price</label>
+            <input type="number" step="0.01" id="stockBuyPrice" required placeholder="0.00" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-400">
+          </div>
+        </div>
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">Current Price (Manual Update)</label>
+          <input type="number" step="0.01" id="stockCurrentPrice" required placeholder="0.00" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-brand-400">
+        </div>
+        <div class="flex justify-end space-x-2 pt-3">
+          <button type="button" onclick="closeModal('stockModal')" class="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl font-medium">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-medium">Save Stock</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- SCRIPT LOGIC -->
+  <script>
+    const STORAGE_KEY = 'THREADLINE_OFFLINE_DB_V1';
+
+    let state = {
+      currency: '₱',
+      transactions: [],
+      payables: [],
+      stocks: []
+    };
+
+    let cashflowChart = null;
+
+    // Initialize App
+    window.addEventListener('DOMContentLoaded', () => {
+      loadStorage();
+      document.getElementById('txDate').valueAsDate = new Date();
+      document.getElementById('printDate').innerText = 'Generated on: ' + new Date().toLocaleDateString();
+      renderAll();
+    });
+
+    // LocalStorage Logic
+    function loadStorage() {
+      const data = localStorage.getItem(STORAGE_KEY);
+      if (data) {
+        try {
+          state = JSON.parse(data);
+        } catch(e) {
+          console.error("Storage load error", e);
+        }
+      }
+    }
+
+    function saveStorage() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      renderAll();
+    }
+
+    function changeCurrency(symbol) {
+      state.currency = symbol;
+      saveStorage();
+    }
+
+    function fmt(amount) {
+      return state.currency + Number(amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    // Navigation Logic
+    function switchTab(tab) {
+      ['dashboard', 'ledger', 'payables', 'stocks'].forEach(t => {
+        document.getElementById(`view-${t}`).classList.add('hidden');
+        document.getElementById(`tab-${t}`).className = "py-3 px-1 border-b-2 border-transparent hover:text-slate-700 whitespace-nowrap";
+      });
+
+      document.getElementById(`view-${tab}`).classList.remove('hidden');
+      document.getElementById(`tab-${tab}`).className = "py-3 px-1 border-b-2 border-brand-500 text-brand-600 font-semibold whitespace-nowrap";
+      
+      if(tab === 'dashboard') renderChart();
+    }
+
+    function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+    function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+    function toggleTxFields() {
+      const type = document.getElementById('txType').value;
+      const buyerGrp = document.getElementById('buyerFieldGroup');
+      const qtyGrp = document.getElementById('qtyFieldGroup');
+      if (type === 'income') {
+        buyerGrp.classList.remove('hidden');
+        qtyGrp.classList.remove('hidden');
+      } else {
+        buyerGrp.classList.add('hidden');
+        qtyGrp.classList.add('hidden');
+      }
+    }
+
+    // Transactions Logic
+    function saveTransaction(e) {
+      e.preventDefault();
+      const type = document.getElementById('txType').value;
+      const tx = {
+        id: Date.now(),
+        type: type,
+        date: document.getElementById('txDate').value,
+        amount: parseFloat(document.getElementById('txAmount').value),
+        method: document.getElementById('txMethod').value,
+        buyer: type === 'income' ? document.getElementById('txBuyer').value : '',
+        qty: type === 'income' ? parseInt(document.getElementById('txQty').value) || 1 : 0,
+        category: document.getElementById('txCategory').value,
+        desc: document.getElementById('txDesc').value
+      };
+      state.transactions.push(tx);
+      saveStorage();
+      closeModal('transactionModal');
+      e.target.reset();
+      document.getElementById('txDate').valueAsDate = new Date();
+    }
+
+    function deleteTx(id) {
+      state.transactions = state.transactions.filter(t => t.id !== id);
+      saveStorage();
+    }
+
+    // Payables Logic
+    function savePayable(e) {
+      e.preventDefault();
+      const p = {
+        id: Date.now(),
+        type: document.getElementById('payType').value,
+        person: document.getElementById('payPerson').value,
+        amount: parseFloat(document.getElementById('payAmount').value),
+        dueDate: document.getElementById('payDueDate').value,
+        method: document.getElementById('payMethod').value,
+        notes: document.getElementById('payNotes').value,
+        status: 'pending'
+      };
+      state.payables.push(p);
+      saveStorage();
+      closeModal('payableModal');
+      e.target.reset();
+    }
+
+    function togglePayableStatus(id) {
+      const item = state.payables.find(p => p.id === id);
+      if(item) {
+        item.status = item.status === 'pending' ? 'settled' : 'pending';
+        saveStorage();
+      }
+    }
+
+    function deletePayable(id) {
+      state.payables = state.payables.filter(p => p.id !== id);
+      saveStorage();
+    }
+
+    // Stocks Logic
+    function saveStock(e) {
+      e.preventDefault();
+      const s = {
+        id: Date.now(),
+        symbol: document.getElementById('stockSymbol').value.toUpperCase(),
+        shares: parseFloat(document.getElementById('stockShares').value),
+        buyPrice: parseFloat(document.getElementById('stockBuyPrice').value),
+        currentPrice: parseFloat(document.getElementById('stockCurrentPrice').value)
+      };
+      state.stocks.push(s);
+      saveStorage();
+      closeModal('stockModal');
+      e.target.reset();
+    }
+
+    function updateStockPrice(id, newPrice) {
+      const s = state.stocks.find(item => item.id === id);
+      if (s) {
+        s.currentPrice = parseFloat(newPrice) || 0;
+        saveStorage();
+      }
+    }
+
+    function deleteStock(id) {
+      state.stocks = state.stocks.filter(s => s.id !== id);
+      saveStorage();
+    }
+
+    // RENDER FUNCTIONS
+    function renderAll() {
+      document.getElementById('currencySelector').value = state.currency || '₱';
+      renderDashboard();
+      renderLedger();
+      renderPayables();
+      renderStocks();
+    }
+
+    function renderDashboard() {
+      const totalIncome = state.transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+      const totalExpense = state.transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+      const netProfit = totalIncome - totalExpense;
+
+      const totalReceivables = state.payables.filter(p => p.type === 'receivable' && p.status === 'pending').reduce((sum, p) => sum + p.amount, 0);
+      const totalPayables = state.payables.filter(p => p.type === 'payable' && p.status === 'pending').reduce((sum, p) => sum + p.amount, 0);
+
+      const stockVal = state.stocks.reduce((sum, s) => sum + (s.shares * s.currentPrice), 0);
+      const stockCost = state.stocks.reduce((sum, s) => sum + (s.shares * s.buyPrice), 0);
+      const stockPnL = stockVal - stockCost;
+
+      document.getElementById('dashNetProfit').innerText = fmt(netProfit);
+      document.getElementById('dashReceivables').innerText = fmt(totalReceivables);
+      document.getElementById('dashPayables').innerText = fmt(totalPayables);
+      document.getElementById('dashStockVal').innerText = fmt(stockVal);
+      document.getElementById('dashStockPnL').innerText = `Unrealized P&L: ${fmt(stockPnL)}`;
+
+      // Channels breakdown
+      const channels = { 'GCash': 0, 'Online Bank': 0, 'Cash': 0, 'Other': 0 };
+      state.transactions.forEach(t => {
+        const amt = t.type === 'income' ? t.amount : -t.amount;
+        if(channels[t.method] !== undefined) channels[t.method] += amt;
+        else channels['Other'] += amt;
+      });
+
+      document.getElementById('channelGCash').innerText = fmt(channels['GCash']);
+      document.getElementById('channelBank').innerText = fmt(channels['Online Bank']);
+      document.getElementById('channelCash').innerText = fmt(channels['Cash']);
+      document.getElementById('channelOther').innerText = fmt(channels['Other']);
+
+      renderChart();
+    }
+
+    function renderLedger() {
+      const tbody = document.getElementById('ledgerTableBody');
+      const search = document.getElementById('ledgerSearch').value.toLowerCase();
+      const typeFilter = document.getElementById('ledgerTypeFilter').value;
+      const methodFilter = document.getElementById('ledgerMethodFilter').value;
+
+      let list = state.transactions.filter(t => {
+        const matchesSearch = (t.buyer || '').toLowerCase().includes(search) || 
+                              (t.category || '').toLowerCase().includes(search) || 
+                              (t.desc || '').toLowerCase().includes(search);
+        const matchesType = typeFilter === 'all' || t.type === typeFilter;
+        const matchesMethod = methodFilter === 'all' || t.method === methodFilter;
+        return matchesSearch && matchesType && matchesMethod;
+      });
+
+      list.sort((a,b) => new Date(b.date) - new Date(a.date));
+
+      if (list.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" class="p-4 text-center text-slate-400">No transactions recorded yet.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = list.map(t => `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="p-3 font-medium">${t.date}</td>
+          <td class="p-3">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${t.type === 'income' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">
+              ${t.type.toUpperCase()}
+            </span>
+          </td>
+          <td class="p-3">${t.category}</td>
+          <td class="p-3 font-semibold">${t.buyer || '-'}</td>
+          <td class="p-3">${t.qty || '-'}</td>
+          <td class="p-3"><span class="bg-slate-100 px-2 py-0.5 rounded text-[10px] font-medium">${t.method || 'Cash'}</span></td>
+          <td class="p-3 text-slate-500">${t.desc || '-'}</td>
+          <td class="p-3 text-right font-bold ${t.type === 'income' ? 'text-emerald-600' : 'text-slate-800'}">
+            ${t.type === 'income' ? '+' : '-'}${fmt(t.amount)}
+          </td>
+          <td class="p-3 text-center no-print">
+            <button onclick="deleteTx(${t.id})" class="text-rose-500 hover:text-rose-700 font-bold">×</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function renderPayables() {
+      const recList = document.getElementById('receivablesList');
+      const payList = document.getElementById('payablesList');
+
+      const receivables = state.payables.filter(p => p.type === 'receivable');
+      const payables = state.payables.filter(p => p.type === 'payable');
+
+      document.getElementById('receivableCount').innerText = `${receivables.filter(r=>r.status==='pending').length} Pending`;
+      document.getElementById('payableCount').innerText = `${payables.filter(p=>p.status==='pending').length} Pending`;
+
+      const renderCard = (p) => `
+        <div class="p-3.5 rounded-xl border ${p.status === 'settled' ? 'bg-slate-50 border-slate-200 opacity-60' : 'bg-white border-slate-200'} flex items-center justify-between gap-3 shadow-xs">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="font-bold text-slate-800">${p.person}</span>
+              <span class="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-medium">${p.method}</span>
+            </div>
+            <p class="text-[11px] text-slate-500 mt-0.5">${p.notes || 'No details'} • <span class="${p.status==='pending'?'text-amber-600':'text-slate-400'}">Due: ${p.dueDate || 'N/A'}</span></p>
+          </div>
+          <div class="text-right">
+            <div class="font-bold text-slate-900">${fmt(p.amount)}</div>
+            <div class="flex items-center justify-end space-x-2 mt-1 no-print">
+              <button onclick="togglePayableStatus(${p.id})" class="text-[10px] font-semibold px-2 py-0.5 rounded ${p.status==='pending' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700'}">
+                ${p.status === 'pending' ? 'Mark Paid' : 'Settled'}
+              </button>
+              <button onclick="deletePayable(${p.id})" class="text-rose-500 text-xs font-bold">×</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      recList.innerHTML = receivables.length ? receivables.map(renderCard).join('') : '<p class="text-slate-400 text-xs text-center py-4">No receivables recorded.</p>';
+      payList.innerHTML = payables.length ? payables.map(renderCard).join('') : '<p class="text-slate-400 text-xs text-center py-4">No payables recorded.</p>';
+    }
+
+    function renderStocks() {
+      const tbody = document.getElementById('stockTableBody');
+      if (state.stocks.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="p-4 text-center text-slate-400">No stock holdings added.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = state.stocks.map(s => {
+        const totalInvested = s.shares * s.buyPrice;
+        const currentVal = s.shares * s.currentPrice;
+        const pnl = currentVal - totalInvested;
+        const pnlPct = totalInvested > 0 ? (pnl / totalInvested) * 100 : 0;
+
+        return `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="p-3 font-bold text-purple-700">${s.symbol}</td>
+            <td class="p-3">${s.shares}</td>
+            <td class="p-3">${fmt(s.buyPrice)}</td>
+            <td class="p-3">
+              <input type="number" step="0.01" value="${s.currentPrice}" onchange="updateStockPrice(${s.id}, this.value)" class="w-24 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs font-semibold focus:ring-1 focus:ring-purple-400">
+            </td>
+            <td class="p-3 font-medium">${fmt(totalInvested)}</td>
+            <td class="p-3 font-bold">${fmt(currentVal)}</td>
+            <td class="p-3 text-right font-bold ${pnl >= 0 ? 'text-emerald-600' : 'text-rose-600'}">
+              ${pnl >= 0 ? '+' : ''}${fmt(pnl)} (${pnlPct.toFixed(2)}%)
+            </td>
+            <td class="p-3 text-center no-print">
+              <button onclick="deleteStock(${s.id})" class="text-rose-500 hover:text-rose-700 font-bold">×</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function renderChart() {
+      const ctx = document.getElementById('cashflowChart').getContext('2d');
+      if(cashflowChart) cashflowChart.destroy();
+
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const currentYear = new Date().getFullYear();
+      
+      const monthlyIncome = new Array(12).fill(0);
+      const monthlyExpense = new Array(12).fill(0);
+
+      state.transactions.forEach(t => {
+        const d = new Date(t.date);
+        if(d.getFullYear() === currentYear) {
+          const m = d.getMonth();
+          if(t.type === 'income') monthlyIncome[m] += t.amount;
+          else monthlyExpense[m] += t.amount;
+        }
+      });
+
+      cashflowChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: months,
+          datasets: [
+            { label: 'Income', data: monthlyIncome, backgroundColor: '#F472B6', borderRadius: 6 },
+            { label: 'Expense', data: monthlyExpense, backgroundColor: '#CBD5E1', borderRadius: 6 }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom' } },
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+    }
+
+    // BACKUP / EXPORT / IMPORT
+    function exportJSON() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+      const anchor = document.createElement('a');
+      anchor.setAttribute("href", dataStr);
+      anchor.setAttribute("download", `threadline-backup-${new Date().toISOString().slice(0,10)}.json`);
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    }
+
+    function importJSON(event) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const imported = JSON.parse(e.target.result);
+          if (imported.transactions && imported.payables && imported.stocks) {
+            state = imported;
+            saveStorage();
+            alert('Backup successfully loaded!');
+          } else {
+            alert('Invalid file format.');
+          }
+        } catch(err) {
+          alert('Error reading backup file.');
+        }
+      };
+      reader.readAsText(event.target.files[0]);
+    }
+  </script>
+</body>
+</html>
